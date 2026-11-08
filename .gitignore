@@ -1,0 +1,15 @@
+inbox/
+archive/
+transcripts/
+.claude/
+__pycache__/
+*.pyc
+Thumbs.db
+desktop.ini
+
+# Private: only the encrypted vault/ is published.
+.passphrase
+recipes/
+images/
+data/
+REVIEW.md
