@@ -63,7 +63,7 @@ def check(path):
         for iid, mod in TOKEN.findall(st.get("text", "")):
             if iid not in ings:
                 errs.append("step %s references unknown %s" % (st.get("n"), iid))
-            if mod and mod not in MODS:
+            if mod and mod not in MODS and not re.match(r"^[\d.]+\s*\w*$", mod):
                 errs.append("step %s bad modifier '%s'" % (st.get("n"), mod))
             if mod != "name":
                 used.add(iid)

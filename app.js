@@ -45,7 +45,7 @@ function fmtNum(n) {
 function plural(display, n) {
   if (n <= 1) return display;
   const m = display.match(/^(\w+)( of .*)$/);
-  const pl = w => /(s|x|ch|sh)$/.test(w) ? w + 'es' : /[^aeiou]o$/.test(w) ? w + 'es' : /[^aeiou]y$/.test(w) ? w.slice(0, -1) + 'ies' : w + 's';
+  const pl = w => /(s|x|ch|sh)$/.test(w) ? w + 'es' : /(potato|tomato)$/.test(w) ? w + 'es' : /[^aeiou]y$/.test(w) ? w.slice(0, -1) + 'ies' : w + 's';
   if (m) return pl(m[1]) + m[2];
   if (/s$/.test(display)) return display;
   return display.replace(/(\w+)(\s*\(.*\))?$/, (all, w, rest) => pl(w) + (rest || ''));

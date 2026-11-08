@@ -31,6 +31,14 @@ recipe-app/
 
 Raw photos and transcripts must never be committed. GitHub Pages publishes the whole repo.
 
+### Privacy (password lock)
+
+The site is public but its content is encrypted. `tools/build.py` encrypts all recipe data and images with AES-GCM, using a key derived from the passphrase in `.passphrase`. That file is gitignored and the human writes it. Never read it, print it or ask for it. The output goes to `vault/` (recipes.bin, i/<hash>.bin, meta.json). The app asks for the password once per phone and decrypts in the browser.
+
+- **Only `vault/` and the app shell are committed.** `recipes/`, `images/`, `data/`, `transcripts/`, `work/` and `REVIEW.md` are gitignored and stay on this PC. Never commit plaintext recipe content or photos.
+- **Recovery:** on a new machine, clone the repo, write `.passphrase`, then run `python tools/unvault.py`. That rebuilds `recipes/` and `images/`.
+- **Changing the password:** edit `.passphrase` and run build.py. It makes a new key, and both phones will need the new password.
+
 ## Photo intake
 
 - The photos come from a Pixel phone via a Google Photos download, as JPEGs (convert HEIC/other formats if any appear). Each card is shot front first, then back, in sequence.
@@ -52,9 +60,31 @@ Raw photos and transcripts must never be committed. GitHub Pages publishes the w
 
 ### Agents
 
-- The main session (Opus) owns the schema, the pairing, the cropping, the validation and the review.
-- Spawn subagents using the **Sonnet** model for steps 1–2, in batches of about 5 recipes each. Give each one the photo paths, this spec and one finished example recipe JSON.
-- After each batch, run validate.py, review it, then move its photos from inbox/ to archive/.
+- The main session (Opus) owns the schema, the pairing, the validation and the review.
+- Spawn subagents using the **Sonnet** model for steps 1–2 and the hero crop, in batches of about 5 recipes each, all launched in parallel. Each agent's whole instruction is `tools/AGENT_BRIEF.md` plus its list of inputs. Keep that brief up to date when conventions change.
+- After all batches finish:
+  - run validate.py;
+  - review the agents' reports and a contact sheet of the new hero images;
+  - fix or flag anything wrong;
+  - add new aliases to tools/ingredients.json;
+  - update REVIEW.md;
+  - move the photos from inbox/ to archive/.
+
+### Card photo intake (tools)
+
+1. `python tools/prep_photos.py sheets` orders inbox/ by EXIF time and writes numbered contact sheets to `work/sheets/`. Look at them to confirm the front/back pairs, spot duplicate shots, and choose each photo's rotation. PIL rotates counter-clockwise; the sheets show raw pixels.
+2. Write `work/plan.json` as `[{"id":"card-NNN","front":N,"back":N+1,"rot_front":-90,"rot_back":90}, ...]`. Then run `python tools/prep_photos.py upright work/plan.json`, which writes `work/card-NNN/` with upright fronts and backs plus their halves.
+3. Give the card folders to Sonnet agents in fives.
+- The second batch (Nov 2026) had 134 photos. They were mostly portrait HelloFresh (front −90, back +90), but some were landscape: some shot upright (0), some upside down (180). Gousto fronts were +90 and Gousto backs either +90 or 0. The front and back of the same card can differ: for some landscape cards the front was upside down but the back was upright. Check each photo on the sheets rather than assuming.
+
+### Importing from HelloFresh online
+
+On request ("import 20 more chicken recipes", etc.):
+1. Run `python tools/hf_pick.py --n 20 [--match "chicken|beef"] [--min-ratings 250]`. It reads HelloFresh UK category pages and ranks the recipes by average rating, requiring at least that many ratings. It skips anything already in recipes/ (by URL or title) and writes `work/hf_picks.json`. Show the human the list if they asked for a specific selection.
+2. Spawn Sonnet agents in batches of 5 URLs, using `tools/AGENT_BRIEF.md` ("Web inputs"). They read only the page's schema.org Recipe JSON-LD and download the main image.
+3. Review, validate, build and deploy as for cards. Web recipes have `source.type: "web"` and keep the URL so the original can be opened.
+- "Mince" means beef or pork mince. Meat-free and sausage meatballs are excluded by default.
+- Fetch politely: one page at a time per agent, and no crawling beyond the listed recipes.
 
 ### Pilot first
 
@@ -161,6 +191,7 @@ Plain HTML/CSS/JS with no framework and no build step beyond `tools/build.py`, w
 - Use a public GitHub repo with GitHub Pages serving from the root of `main`.
 - The human is new to git. Do the git and `gh` work for them, explaining only what they must do themselves (e.g. `gh auth login` in the browser).
 - Deploying means: build, validate, commit, push. Then give them the live URL.
+- Git and gh live in `C:\Program Files\Git\cmd` and `C:\Program Files\GitHub CLI`, which aren't on the tool shell's PATH, so add them to `$env:Path` in each call. Write commit messages to a file without a BOM and use `git commit -F`.
 
 ## Adding recipes later
 
