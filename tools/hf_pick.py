@@ -62,6 +62,8 @@ def main():
     seen = {}
     for slug in PAGES:
         for r in listing(slug):
+            if not isinstance(r.get("websiteUrl"), str) or not r.get("name"):
+                continue
             seen.setdefault(r["websiteUrl"].split("?")[0], r)
     picks, names = [], set()
     for url, r in seen.items():
