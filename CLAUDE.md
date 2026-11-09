@@ -38,6 +38,7 @@ The site is public but its content is encrypted. `tools/build.py` encrypts all r
 - **Only `vault/` and the app shell are committed.** `recipes/`, `images/`, `data/`, `transcripts/`, `work/` and `REVIEW.md` are gitignored and stay on this PC. Never commit plaintext recipe content or photos.
 - **Recovery:** on a new machine, clone the repo, write `.passphrase`, then run `python tools/unvault.py`. That rebuilds `recipes/` and `images/`.
 - **Changing the password:** edit `.passphrase` and run build.py. It makes a new key, and both phones will need the new password.
+- **Testing locally:** don't build with a test passphrase (`RX_PASSPHRASE`). The next real build would then rotate the salt, which makes both phones ask for the password again. To test locally, ask the human to unlock the preview themselves, or just check that `data/recipes.json` is correct.
 
 ## Photo intake
 
