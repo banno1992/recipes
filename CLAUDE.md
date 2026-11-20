@@ -194,6 +194,14 @@ Plain HTML/CSS/JS with no framework and no build step beyond `tools/build.py`, w
 - Deploying means: build, validate, commit, push. Then give them the live URL.
 - Git and gh live in `C:\Program Files\Git\cmd` and `C:\Program Files\GitHub CLI`, which aren't on the tool shell's PATH, so add them to `$env:Path` in each call. Write commit messages to a file without a BOM and use `git commit -F`.
 
+### Home recipes (written from scratch)
+
+The human can list dishes they cook without a recipe and ask for them to be written. This is the only exception to "never invent recipe content".
+- Agents follow "Home inputs" in `tools/AGENT_BRIEF.md`.
+- They use `source.type: "home"` and brand "Home", and the recipe's first note says it was written by Claude as a starting point.
+- Photos come only from Wikimedia Commons (openly licensed), credited in the notes. Otherwise `python tools/title_tile.py <id> "<Title>"` makes a stand-in tile.
+- A recipe the human says exists somewhere (a note, a PDF) is never written from scratch. Ask for it, or transcribe the source.
+
 ## Adding recipes later
 
 - **Photo:** drop it in inbox/ and run the same pipeline.

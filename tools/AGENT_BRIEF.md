@@ -42,6 +42,24 @@ Per card:
    Oil/salt/pepper are rarely listed: add them as staples if the method uses them.
 4. Hero image: download the JSON-LD `image` URL, then save with Pillow: thumbnail to 800px long edge, JPEG quality 80, `images/<id>.jpg`.
 
+## Home inputs (dishes the human cooks without a recipe)
+The human asked for these to be written from scratch. This is the one case where you write recipe content.
+Each input is a dish name, sometimes with the human's own description in brackets. Follow that description exactly
+(e.g. "bacon, hash browns, egg and tomato ketchup in a wrap" means those are the fillings).
+1. Write a plain, everyday UK home version: common UK supermarket ingredients, no chef flourishes, no blog text,
+   4–8 clear steps, realistic `time_minutes`. Shop-bought shortcuts are fine where a home cook would use them
+   (jar pesto, gravy granules, frozen veg). Write both serving columns: `servings: {"base": 2, "available": [2, 4]}`.
+2. `source: {"type":"home","brand":"Home","url":null}`. Add a first note:
+   `{"text":"Written by Claude as a starting point. Adjust to how you make it.","fixed":false}`. No `substitution` flags needed.
+3. `transcripts/<id>.md`: the dish name and the human's description, plus one line on what you based it on.
+4. Image, from Wikimedia Commons only (openly licensed): search with the API, e.g.
+   `https://commons.wikimedia.org/w/api.php?action=query&format=json&generator=search&gsrnamespace=6&gsrsearch=<dish>%20filetype:bitmap&gsrlimit=15&prop=imageinfo&iiprop=url|extmetadata&iiurlwidth=1200`
+   (User-Agent: `RecipeApp/1.0 (personal recipe app)`; never add an email). Download a few candidates and LOOK at them.
+   Pick one that clearly shows the finished dish, appetising, plated, not a packet or a menu. Save as 800px JPEG q80 to
+   `images/<id>.jpg` and add a note `{"text":"Photo: <file title>, <author>, <licence>, Wikimedia Commons","fixed":false}`.
+   If nothing suitable exists, don't save an image; report `image: none` and the orchestrator makes a title tile.
+5. If an input is a URL or PDF, it's a real recipe: transcribe it as a web input (brand = the publisher) instead.
+
 ## Both
 - Never invent content. Branded sachets/pastes → apply the standard swaps in CLAUDE.md; anything else, choose a
   sensible UK supermarket equivalent, mark `substitution: true`, keep `original`, and report it.
