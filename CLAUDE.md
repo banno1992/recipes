@@ -212,13 +212,18 @@ Both phones share one Firestore document (`shared/home`) in the Firebase project
 The human can list dishes they cook without a recipe and ask for them to be written. This is the only exception to "never invent recipe content".
 - Agents follow "Home inputs" in `tools/AGENT_BRIEF.md`.
 - They use `source.type: "home"` and brand "Home", and the recipe's first note says it was written by Claude as a starting point.
-- Photos come only from Wikimedia Commons (openly licensed), credited in the notes. Otherwise `python tools/title_tile.py <id> "<Title>"` makes a stand-in tile.
+- Photos: generate them with Gemini in the browser (same setup as the card clean-up below). Use a text prompt that describes the plated dish from the recipe's own ingredients, as an overhead meal-kit-style photo. Save to `images/<id>.jpg` at 800px, and add a note `{"text":"Photo: generated with Gemini","fixed":false}`. Existing Wikimedia photos (credited in the notes) can stay. `tools/title_tile.py` is only a last-resort stand-in.
 - A recipe the human says exists somewhere (a note, a PDF) is never written from scratch. Ask for it, or transcribe the source.
 
 ### Cleaning up card hero photos (Gemini)
 
 Card hero photos are often washed out. The human chose to regenerate them with Nano Banana in the Gemini web app (their Google AI Pro plan, not the API), a few per day as their usage allows. Only `source.type: "card"` images are in the queue.
 - `python tools/gemini_thumbs.py next N` lists the next images, most washed out first. In Claude in Chrome, open a new Gemini chat for each one, pick the image model, upload the image with the text of `tools/gemini_prompt.txt`, and download the result.
+- Browser details:
+  - Choose "Create image" from the + menu.
+  - Gemini only creates its file input when Upload is clicked, and that opens a native picker. First patch `HTMLInputElement.prototype.click` in the page so file inputs are caught instead of opened, then click "Upload files" and use `file_upload` on the caught input.
+  - The download icon on the result saves `Downloads/Gemini_Generated_Image_*.jfif`, a JPEG at about 2300px. Move it to `work/gemini/in/<id>.jpg`.
+  - The human approved these downloads on 2026-11-24.
 - Compare the result to the original before accepting. Reject it if any food, garnish or plate has changed. Then run `gemini_thumbs.py accept <id> <file>` or `reject <id> <why>`. Accepting backs up the original to `images/originals/` and centre-crops the result to the original's size.
 - After each day's batch, run `gemini_thumbs.py sheet` and show the human, then build and deploy.
 - `revert <id>` restores an original. `status` shows progress. The state is in `work/gemini/state.json`.

@@ -52,12 +52,13 @@ Each input is a dish name, sometimes with the human's own description in bracket
 2. `source: {"type":"home","brand":"Home","url":null}`. Add a first note:
    `{"text":"Written by Claude as a starting point. Adjust to how you make it.","fixed":false}`. No `substitution` flags needed.
 3. `transcripts/<id>.md`: the dish name and the human's description, plus one line on what you based it on.
-4. Image, from Wikimedia Commons only (openly licensed): search with the API, e.g.
+4. Image: the orchestrator generates the photo afterwards with Gemini (see CLAUDE.md), so agents may skip this step.
+   If you are asked for one, take it from Wikimedia Commons (openly licensed): search with the API, e.g.
    `https://commons.wikimedia.org/w/api.php?action=query&format=json&generator=search&gsrnamespace=6&gsrsearch=<dish>%20filetype:bitmap&gsrlimit=15&prop=imageinfo&iiprop=url|extmetadata&iiurlwidth=1200`
    (User-Agent: `RecipeApp/1.0 (personal recipe app)`; never add an email). Download a few candidates and LOOK at them.
    Pick one that clearly shows the finished dish, appetising, plated, not a packet or a menu. Save as 800px JPEG q80 to
    `images/<id>.jpg` and add a note `{"text":"Photo: <file title>, <author>, <licence>, Wikimedia Commons","fixed":false}`.
-   If nothing suitable exists, don't save an image; report `image: none` and the orchestrator makes a title tile.
+   If nothing suitable exists, don't save an image; report `image: none` and the orchestrator generates one with Gemini.
 5. If an input is a URL or PDF, it's a real recipe: transcribe it as a web input (brand = the publisher) instead.
 
 ## Both
