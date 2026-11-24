@@ -1,7 +1,7 @@
 Re-render this exact food photo as a clean, professional recipe-card photo.
 
-Keep the content identical: the same dish, the same ingredients and garnishes, the same plate or bowl, the same arrangement and camera angle. Do not add, remove or move any food, props or cutlery. Do not add steam, text or logos.
+Keep the content identical: the same dish, the same ingredients and garnishes, the same plate or bowl, the same arrangement and camera angle, and the same background and tabletop colours. Keep the food's own colours: do not make sauces or pasta more orange or yellow than they are. Do not add, remove or move any food, props or cutlery. Do not add steam, text or logos.
 
-Fix the photo quality only: remove the washed-out, faded look and any glare or reflection from the card it was photographed from. Use natural, true-to-life colour, neutral white balance, rich but not oversaturated tones, good contrast and soft even daylight. Keep it sharp and realistic, not illustrated.
+Fix the photo quality only: remove the washed-out, faded look and any glare or reflection from the card it was photographed from. Use natural, true-to-life colour, rich but not oversaturated tones, good contrast and soft even daylight. Keep it sharp and realistic, not illustrated.
 
 Keep the same framing and aspect ratio as the input.
