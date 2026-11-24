@@ -6,6 +6,66 @@ const store = {
   set(k, v) { try { localStorage.setItem('rx.' + k, JSON.stringify(v)); } catch (e) { /* ignore */ } },
 };
 
+/* ---------- sync (see sync.js) ---------- */
+// Shared: week, picks, locks, checks, history, pickSize. Per phone: key, servings, rs.*, done.*.
+// Firestore shape: week {id: {servings, t}}, locks {id: true}, checks {key: true}, history {id: ms}, picks [ids], pickSize.
+const sync = window.rxSync = {
+  DEL: '__rx_delete__',
+  status: 'loading', user: null, ready: false,
+  merge(data) { if (window.rxFire) window.rxFire.write({ data }); },
+  // auto: a change the app made by itself (e.g. topping up picks); held back until the shared state has loaded.
+  replace(data, auto) { if (window.rxFire && (!auto || this.ready)) window.rxFire.write({ data, fields: Object.keys(data) }); },
+  setStatus(s) { this.status = s; refresh(); },
+  localState() {
+    const week = {};
+    store.get('week', []).forEach((w, k) => { week[w.id] = { servings: w.servings, t: Date.now() + k }; });
+    return {
+      week, picks: store.get('picks', []), pickSize: store.get('pickSize', 5),
+      locks: Object.fromEntries(store.get('locks', []).map(id => [id, true])),
+      checks: store.get('checks', {}), history: store.get('history', {}),
+    };
+  },
+  // Local history entries newer than the shared ones, merged in on first sign-in.
+  newerHistory(remote) {
+    const out = {};
+    for (const [id, t] of Object.entries(store.get('history', {}))) if (!(remote[id] >= t)) out[id] = t;
+    return Object.keys(out).length ? out : null;
+  },
+  apply(d) {
+    const next = {
+      week: Object.entries(d.week || {}).sort((a, b) => (a[1].t || 0) - (b[1].t || 0)).map(([id, v]) => ({ id, servings: v.servings })),
+      picks: d.picks || [], locks: Object.keys(d.locks || {}), checks: d.checks || {}, history: d.history || {},
+      pickSize: d.pickSize || store.get('pickSize', 5),
+    };
+    let changed = false;
+    for (const [k, v] of Object.entries(next)) {
+      if (JSON.stringify(store.get(k, null)) !== JSON.stringify(v)) { store.set(k, v); changed = true; }
+    }
+    if (changed) refresh();
+  },
+};
+// Redraw the current screen after a remote change, keeping the scroll position. The recipe view is left alone mid-cook.
+function refresh() {
+  if (!RECIPES.length) return;
+  updateBadge();
+  const h = location.hash.replace(/^#/, '') || '/';
+  if (h.startsWith('/r/') || h === '/all') return;
+  const y = scrollY;
+  if (h === '/week') renderWeek(); else if (h === '/list') renderList(); else renderPick();
+  scrollTo(0, y);
+}
+function syncBar() {
+  if (sync.status === 'out') return `<div class="syncbar"><span>Sign in to share picks and the list between phones.</span><button class="btn secondary" id="syncIn">Sign in with Google</button></div>`;
+  if (sync.status === 'denied') return `<div class="syncbar"><span>${esc(sync.user ? sync.user.email : 'This account')} isn't allowed to sync yet.</span><button class="btn ghost" id="syncOut">Sign out</button></div>`;
+  if (sync.status === 'error') return `<div class="syncbar"><span>Sync isn't working right now. Changes are saved on this phone.</span></div>`;
+  return '';
+}
+function bindSyncBar() {
+  const i = $view.querySelector('#syncIn'), o = $view.querySelector('#syncOut');
+  if (i) i.onclick = () => window.rxFire && window.rxFire.signIn();
+  if (o) o.onclick = () => window.rxFire && window.rxFire.signOut();
+}
+
 let RECIPES = [];
 let BY_ID = {};
 const $view = document.getElementById('view');
@@ -123,11 +183,13 @@ const week = {
     const ex = w.find(x => x.id === id);
     if (ex) ex.servings = servings; else w.push({ id, servings });
     store.set('week', w);
-    const h = store.get('history', {}); h[id] = Date.now(); store.set('history', h);
+    const now = Date.now();
+    const h = store.get('history', {}); h[id] = now; store.set('history', h);
+    sync.merge({ week: { [id]: ex ? { servings } : { servings, t: now } }, history: { [id]: now } });
     updateBadge();
   },
-  remove(id) { store.set('week', store.get('week', []).filter(x => x.id !== id)); updateBadge(); },
-  clear() { store.set('week', []); store.set('checks', {}); updateBadge(); },
+  remove(id) { store.set('week', store.get('week', []).filter(x => x.id !== id)); sync.merge({ week: { [id]: sync.DEL } }); updateBadge(); },
+  clear() { store.set('week', []); store.set('checks', {}); store.set('picks', []); sync.replace({ week: {}, checks: {}, picks: [] }); updateBadge(); },
 };
 function defaultServings(r) { return store.get('servings', 2) || r.servings.base; }
 function updateBadge() {
@@ -165,6 +227,7 @@ function currentPicks() {
     if (picks.length > size) picks = picks.slice(0, Math.max(size, locks.length));
     else picks = picks.concat(draw(size - picks.length, picks));
     store.set('picks', picks);
+    sync.replace({ picks }, true);
   }
   return { picks, locks, size };
 }
@@ -173,7 +236,9 @@ function reroll() {
   const fresh = draw(picks.length - locks.length, picks); // exclude everything currently shown
   const pool = fresh.length < picks.length - locks.length ? draw(picks.length - locks.length, locks) : fresh;
   let k = 0;
-  store.set('picks', picks.map(id => locks.includes(id) ? id : pool[k++]).filter(Boolean));
+  const next = picks.map(id => locks.includes(id) ? id : pool[k++]).filter(Boolean);
+  store.set('picks', next);
+  sync.replace({ picks: next });
   renderPick();
   window.scrollTo(0, 0);
 }
@@ -192,7 +257,7 @@ function renderPick() {
   setHeader('What shall we eat?', 'pick');
   if (!RECIPES.length) { $view.innerHTML = '<p class="empty">No recipes yet.</p>'; return; }
   const { picks, locks, size } = currentPicks();
-  $view.innerHTML = `
+  $view.innerHTML = `${syncBar()}
     <div class="toolbar">
       <span class="hint">Tap a meal to add it. Lock to keep.</span>
       <div class="seg" role="group" aria-label="How many">
@@ -202,16 +267,19 @@ function renderPick() {
     </div>
     <div class="grid">${picks.map(id => tile(BY_ID[id], { lockable: true, locked: locks.includes(id) })).join('')}</div>
     <div class="reroll-bar"><button class="btn" id="reroll">${icon.dice} Reroll${locks.length ? ' unlocked' : ''}</button></div>`;
-  $view.querySelectorAll('[data-size]').forEach(b => b.onclick = () => { store.set('pickSize', +b.dataset.size); renderPick(); });
+  $view.querySelectorAll('[data-size]').forEach(b => b.onclick = () => { store.set('pickSize', +b.dataset.size); sync.replace({ pickSize: +b.dataset.size }); renderPick(); });
   $view.querySelector('#reroll').onclick = reroll;
   $view.querySelectorAll('[data-lock]').forEach(b => b.onclick = e => {
     e.stopPropagation();
     const id = b.dataset.lock;
     let l = store.get('locks', []);
-    l = l.includes(id) ? l.filter(x => x !== id) : l.concat(id);
+    const on = !l.includes(id);
+    l = on ? l.concat(id) : l.filter(x => x !== id);
     store.set('locks', l);
+    sync.merge({ locks: { [id]: on ? true : sync.DEL } });
     renderPick();
   });
+  bindSyncBar();
   bindTiles(renderPick);
 }
 
@@ -275,11 +343,13 @@ function bindStepper(root, cb, getV) {
 function renderWeek() {
   setHeader('This week', 'week');
   const w = week.all();
+  const who = sync.status === 'in' && sync.user ? `<p class="from synced">Shared · signed in as ${esc(sync.user.name)} · <button class="linkish" id="syncOut">Sign out</button></p>` : '';
   if (!w.length) {
-    $view.innerHTML = `<div class="empty">Nothing picked yet.<br><a class="btn" href="#/">Pick meals</a></div>`;
+    $view.innerHTML = `${syncBar()}<div class="empty">Nothing picked yet.<br><a class="btn" href="#/">Pick meals</a></div>${who}`;
+    bindSyncBar();
     return;
   }
-  $view.innerHTML = `
+  $view.innerHTML = `${syncBar()}
     <div class="card rows">${w.map(x => {
       const r = BY_ID[x.id];
       return `<div class="row" data-id="${r.id}">
@@ -292,11 +362,12 @@ function renderWeek() {
     <div class="stack">
       <a class="btn block" href="#/list">${icon.cart} Shopping list</a>
       <button class="btn ghost" id="clearWeek">Clear the week</button>
-    </div>`;
+    </div>${who}`;
+  bindSyncBar();
   bindStepper($view, (v, b) => { week.set(b.closest('.row').dataset.id, v); renderWeek(); });
   $view.querySelectorAll('[data-rm]').forEach(b => b.onclick = () => { week.remove(b.dataset.rm); renderWeek(); });
   $view.querySelector('#clearWeek').onclick = () => {
-    if (confirm('Clear all meals from this week?')) { week.clear(); store.set('picks', []); renderWeek(); }
+    if (confirm('Clear all meals from this week?')) { week.clear(); renderWeek(); }
   };
 }
 
@@ -374,9 +445,10 @@ function renderList() {
     const c = store.get('checks', {});
     if (cb.checked) c[cb.dataset.key] = true; else delete c[cb.dataset.key];
     store.set('checks', c);
+    sync.merge({ checks: { [cb.dataset.key]: cb.checked ? true : sync.DEL } });
     cb.closest('.check').classList.toggle('done', cb.checked);
   });
-  $view.querySelector('#untick').onclick = () => { store.set('checks', {}); renderList(); };
+  $view.querySelector('#untick').onclick = () => { store.set('checks', {}); sync.replace({ checks: {} }); renderList(); };
   $view.querySelector('#share').onclick = shareList;
 }
 async function shareList() {

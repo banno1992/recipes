@@ -1,6 +1,6 @@
 # Recipe App — Build Spec
 
-A personal offline web app (PWA) holding ~50–100 favourite meal-kit recipes (Gousto, HelloFresh etc.), rewritten into one consistent format. Used by two people on Android phones. Public, no sync, no backend.
+A personal offline web app (PWA) holding ~50–100 favourite meal-kit recipes (Gousto, HelloFresh etc.), rewritten into one consistent format. Used by two people on Android phones. Static site on GitHub Pages; the two phones share their picks and shopping list through Firebase (see Sync).
 
 Core jobs:
 1. Remind us of recipes we like but have forgotten (random meal picker).
@@ -173,19 +173,32 @@ Plain HTML/CSS/JS with no framework and no build step beyond `tools/build.py`, w
 - **Picker (home):** shows 5 or 10 random recipe tiles (toggle), each with a photo and title.
   - Tap the lock on a tile to keep it, and Reroll to replace the unlocked ones.
   - Tap a tile to add it to "This week" and set its servings.
-  - Weight the random draw towards recipes not picked recently. Keep the pick history in localStorage, since the main goal is surfacing forgotten favourites.
+  - Weight the random draw towards recipes not picked recently. Keep the pick history (shared between phones, see Sync), since the main goal is surfacing forgotten favourites.
 - **This week:** the chosen meals with their servings, and a "Shopping list" button.
 - **Shopping list:** combines all chosen meals.
   - Merge items by canonical `name`, converting g↔kg and ml↔l. Keep counts separate from weights.
   - Group by category in supermarket order.
   - Leave staples out. Put cupboard items in a separate "Check the cupboard" section.
-  - Make each item a tickable checkbox, saved in localStorage.
+  - Make each item a tickable checkbox; ticks are shared between phones.
   - Add a Share button using the Web Share API with plain text, so it works on WhatsApp.
 - **All recipes:** a searchable grid with a filter by brand or tag.
 - **Recipe view:** hero image, servings stepper, ingredients, then steps with inline scaled amounts.
   - The screen stays awake while it's open, using the Wake Lock API. Re-acquire the lock on `visibilitychange` and show a small indicator.
   - Tap a step to mark it done, and tap a timer to start it.
 - **PWA:** add `manifest.json` and a service worker that caches the app, the data and the images, so the whole app works offline after the first load. Make it installable to the Android home screen. Bump the cache version on every deploy.
+
+## Sync
+
+Both phones share one Firestore document (`shared/home`) in the Firebase project `recipes-6a608` (Spark free plan, europe-west2). `sync.js` holds the Firebase config and talks to Firestore; `app.js` keeps localStorage as its working copy and pushes each change through `sync.merge()`/`sync.replace()`.
+
+- **Shared:** `week` (`{id: {servings, t}}`, ordered by `t`), `picks`, `locks` (`{id: true}`), `checks` (`{key: true}`), `history` (`{id: ms}`), `pickSize`.
+- **Per phone:** the vault key, default servings, per-recipe servings (`rs.*`) and ticked steps (`done.*`).
+- **Merging:** item-level. Locks, ticks, week items and history merge key by key; `picks` and whole-field clears replace the field. The last write to the same item wins.
+- **Sign-in:** Google, once per phone (popup, redirect fallback). Signing in is optional; signed out, the app works locally as before.
+- **First sign-in:** if the shared doc doesn't exist yet the phone uploads its local state; otherwise the shared state replaces the phone's, except that newer local pick history is merged in. The phone waits for the server before deciding, so an empty offline cache can't overwrite the shared state.
+- **Offline:** Firestore's persistent cache queues writes and sends them when back online. The service worker caches the Firebase SDK files from gstatic.
+- **Access:** Firestore security rules allow `shared/home` only for verified Google accounts in an email allow-list. Everything else is denied. Edit the list in the Firebase console → Firestore → Rules. Recipe content and photos never go to Firebase; they stay in the encrypted vault.
+- The Firebase web config in `sync.js` is public by design. Authorized domains for sign-in: `localhost`, `banno1992.github.io`.
 
 ## Hosting
 
@@ -201,6 +214,14 @@ The human can list dishes they cook without a recipe and ask for them to be writ
 - They use `source.type: "home"` and brand "Home", and the recipe's first note says it was written by Claude as a starting point.
 - Photos come only from Wikimedia Commons (openly licensed), credited in the notes. Otherwise `python tools/title_tile.py <id> "<Title>"` makes a stand-in tile.
 - A recipe the human says exists somewhere (a note, a PDF) is never written from scratch. Ask for it, or transcribe the source.
+
+### Cleaning up card hero photos (Gemini)
+
+Card hero photos are often washed out. The human chose to regenerate them with Nano Banana in the Gemini web app (their Google AI Pro plan, not the API), a few per day as their usage allows. Only `source.type: "card"` images are in the queue.
+- `python tools/gemini_thumbs.py next N` lists the next images, most washed out first. In Claude in Chrome, open a new Gemini chat for each one, pick the image model, upload the image with the text of `tools/gemini_prompt.txt`, and download the result.
+- Compare the result to the original before accepting. Reject it if any food, garnish or plate has changed. Then run `gemini_thumbs.py accept <id> <file>` or `reject <id> <why>`. Accepting backs up the original to `images/originals/` and centre-crops the result to the original's size.
+- After each day's batch, run `gemini_thumbs.py sheet` and show the human, then build and deploy.
+- `revert <id>` restores an original. `status` shows progress. The state is in `work/gemini/state.json`.
 
 ## Adding recipes later
 
